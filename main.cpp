@@ -276,6 +276,137 @@ class MonteCarloIntegrator {
 // TODO: `Use different type of sampling: stratified sampling, importance sampling (Metropolis-Hastings).`
 //-> stratified sampling
 
+
+//-> Metropolis-Hastings
+
+/*
+Metropolis-Hastings is useful to get a sample generated from a "complex" probability distribution.
+How does it work: 
+-choose a starting point x0 (we can choose whatever we want, like the origin)
+-define a proposal distribution Q(x'|x), it will generates x' starting from x
+-x' is the new candidate point
+-compute r (acceptance rateo)
+-decide to accept the point or not
+-repeat
+
+//To parallelize it: divide the sample in multiple chains and compute the avg
+
+*/
+
+
+// Metropolis-Hastings Integrator class with parallel chains
+class MetropolisHastingsIntegrator {
+    const IntegrationDomain &domain; 
+    std::normal_distribution<double> proposalDist; // Gaussian proposal distribution
+
+    // Initializes random engines with unique seeds for each chain
+    std::vector<std::mt19937> initializeEngines(size_t numChains) {
+        std::random_device rd; 
+        std::vector<std::mt19937> engines(numChains); 
+        for (size_t i = 0; i < numChains; ++i) {
+            engines[i] = std::mt19937(rd()); // Initialize each engine with a unique seed.
+        }
+        return engines;
+    }
+
+public:
+    // Constructor to initialize the integrator with a domain
+    explicit MetropolisHastingsIntegrator(const IntegrationDomain &d)
+        : domain(d), proposalDist(0.0, 1.0) {} // Gaussian proposal distribution (mean = 0, stddev = 1).
+
+    // Perform a single Metropolis-Hastings chain
+    double integrateSingleChain(
+        const std::function<double(const std::vector<double> &)> &f, 
+        size_t numPoints,                                            
+        const std::vector<double> &initialPoint,                     
+        std::mt19937 &engine,                                        
+        size_t &accepted                                             // Counter for accepted points.
+    ) {
+        size_t dimensions = initialPoint.size(); // Number of dimensions of the domain.
+        std::vector<double> currentPoint = initialPoint; // Current point (initially the starting point).
+        double currentFValue = f(currentPoint); // Value of the function at the current point.
+
+        double sumF = 0.0; .
+        accepted = 0;
+
+        for (size_t i = 0; i < numPoints; ++i) {
+            // Generate a candidate point by adding Gaussian noise to the current point.
+            std::vector<double> candidatePoint(dimensions);
+            for (size_t d = 0; d < dimensions; ++d) {
+                candidatePoint[d] = currentPoint[d] + proposalDist(engine);
+            }
+
+            // Check if the candidate point is within the domain.
+            if (domain.contains(candidatePoint)) {
+                double candidateFValue = f(candidatePoint);
+
+                // Compute the Metropolis-Hastings acceptance ratio.
+                double acceptanceRatio = candidateFValue / currentFValue;
+
+                // Accept or reject the candidate point based on a uniform random threshold.
+                if (std::uniform_real_distribution<>(0.0, 1.0)(engine) <= acceptanceRatio) {
+                    currentPoint = candidatePoint; 
+                    currentFValue = candidateFValue; 
+                    ++accepted;
+                }
+            }
+
+            // Add the current function value to the cumulative sum.
+            sumF += currentFValue;
+        }
+
+        // Return the partial integral result scaled by the domain's volume.
+        return domain.getVolume() * sumF / static_cast<double>(numPoints);
+    }
+
+    // Perform parallel integration with multiple chains
+    double integrateParallel(
+        const std::function<double(const std::vector<double> &)> &f, 
+        size_t numPoints,                                           
+        const std::vector<double> &initialPoint,                     
+        size_t numChains                                            
+    ) {
+        // Initialize random engines for each chain.
+        auto engines = initializeEngines(numChains);
+
+        // Calculate the number of points to be sampled per chain.
+        size_t pointsPerChain = numPoints / numChains;
+
+        // Launch parallel chains using std::async.
+        std::vector<std::future<std::pair<double, size_t>>> futures;
+        for (size_t i = 0; i < numChains; ++i) {
+            futures.push_back(std::async(
+                std::launch::async, // Execute asynchronously.
+                [this, &f, pointsPerChain, &initialPoint, &engine = engines[i]]() {
+                    size_t accepted = 0; // Counter for accepted points in this chain.
+                    double result = this->integrateSingleChain(f, pointsPerChain, initialPoint, engine, accepted);
+                    return std::make_pair(result, accepted); // Return the partial result and accepted points.
+                }
+            ));
+        }
+
+        // Collect results from all chains.
+        double totalResult = 0.0; // Sum of partial results from all chains.
+        size_t totalAccepted = 0; // Sum of accepted points from all chains.
+        for (auto &future : futures) {
+            auto [result, accepted] = future.get(); // Retrieve the result from each chain.
+            totalResult += result; 
+            totalAccepted += accepted;
+        }
+
+        // Print the overall acceptance rate.
+        std::cout << "Overall acceptance rate: "
+                  << static_cast<double>(totalAccepted) / numPoints * 100.0 << "%\n";
+
+        // Return the combined result (average of chain results).
+        return totalResult / numChains;
+    }
+};
+
+
+
+//TODO: update the main with the stratified and MH samplings
+
 int main() {
     // Function to integrate: x^2 + y^2
     auto f = [](const std::vector<double> &x) {
