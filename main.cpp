@@ -7,6 +7,7 @@
 #include <future>
 #include <chrono>
 #include <iomanip>
+#include <Eigen/Dense>
 
 // An interface for different domains
 class IntegrationDomain {
@@ -99,6 +100,91 @@ public:
         return std::abs(area) / 2.0;
     }
 };
+
+/* H form -> P = {x ∈ R^n ∣ A⋅x≤b }
+ where every row of Ax≤b represents an half-space*/
+class Polytope : public IntegrationDomain {
+
+    Eigen::MatrixXd A;
+    Eigen::VectorXd b;
+    std::pair<Eigen::VectorXd, Eigen::VectorXd> bounds;
+
+    public Polytope(const Eigen::MatrixXd &A_ , const Eigen::VectorXd b_, const std::pair<Eigen::VectorXd, Eigen::VectorXd> &explicitBounds)
+    : A(A_), b(b_), bounds(explicitBounds) {
+        if(A.rows()! = b.size()){ // A's rows must be equal to b's rows
+            throw std::invalid_argument("A and b's dimensions aren't compatible")
+        }
+         if (explicitBounds.first.size() != A.cols() || explicitBounds.second.size() != A.cols()) {
+            throw std::invalid_argument("Bounds must match the dimensionality of the polytope.");
+        } // ensures that the dimensionality of the bounds matches the columns of A
+    }
+
+   // verifies if a point belongs to P and returns true if it does, false otherwise
+     bool contains(const Eigen::VectorXd &point) const override {
+      Eigen::VectorXd pointVec = Eigen::Map<const Eigen::VectorXd>(point.data(), point.size());
+        /* A*point is a mvm whose result is confronted with the
+        corresponding element of b*/
+        return ((A*pointVec).array() <= b.array()).all(); // this is done for all the points
+        
+     }
+
+   // takes the bound as a parameter 
+    std::vector<std::pair<double, double>> getBounds() const override {
+        std::vector<std::pair<double, double>> box(bounds.first.size());
+        for (size_t i = 0; i < bounds.first.size(); ++i) {
+            box[i] = {bounds.first[i], bounds.second[i]};
+        }
+        return box;
+    }
+
+
+    double getVolume(size_t numSamples, size_t strataPerDimension) const {
+    auto [lower, upper] = bounds; // Bounding box
+    size_t dimensions = lower.size();
+
+    // Calculate bounding box volume
+    double boundingBoxVolume = 1.0;
+    for (size_t i = 0; i < dimensions; ++i) {
+        boundingBoxVolume *= (upper[i] - lower[i]);
+    }
+
+    // Monte Carlo sampling with stratification
+    size_t numThreads = std::thread::hardware_concurrency();
+    size_t pointsPerThread = numSamples / numThreads;
+
+    // Lambda for thread workers
+    auto worker = [&](size_t threadIndex) {
+        std::mt19937 rng(std::random_device{}());
+        double localCount = 0;
+
+        for (size_t i = 0; i < pointsPerThread; ++i) {
+            auto point = generateStratifiedPoint(rng, strataPerDimension); // Use existing function
+            if (contains(point)) {
+                localCount++;
+            }
+        }
+
+        return localCount;
+    };
+
+    // Parallel execution
+    std::vector<std::future<double>> futures;
+    for (size_t i = 0; i < numThreads; ++i) {
+        futures.emplace_back(std::async(std::launch::async, worker, i));
+    }
+
+    // Aggregate results
+    double pointsInside = 0.0;
+    for (auto &future : futures) {
+        pointsInside += future.get();
+    }
+
+    // Estimate volume
+    return boundingBoxVolume * (pointsInside / numSamples);
+}
+
+}
+
 
 class MonteCarloIntegrator {
     std::vector<std::uniform_real_distribution<double>> distributions;                  //distributions: a vector of uniform distributions. Each distribution generates random numbers in a specific range, one for each domain size
