@@ -7,7 +7,6 @@
 #include <future>
 #include <chrono>
 #include <iomanip>
-#include <Eigen/Dense>
 
 // An interface for different domains
 class IntegrationDomain {
@@ -101,91 +100,6 @@ public:
     }
 };
 
-/* H form -> P = {x ∈ R^n ∣ A⋅x≤b }
- where every row of Ax≤b represents an half-space*/
-class Polytope : public IntegrationDomain {
-
-    Eigen::MatrixXd A;
-    Eigen::VectorXd b;
-    std::pair<Eigen::VectorXd, Eigen::VectorXd> bounds;
-
-    public Polytope(const Eigen::MatrixXd &A_ , const Eigen::VectorXd b_, const std::pair<Eigen::VectorXd, Eigen::VectorXd> &explicitBounds)
-    : A(A_), b(b_), bounds(explicitBounds) {
-        if(A.rows()! = b.size()){ // A's rows must be equal to b's rows
-            throw std::invalid_argument("A and b's dimensions aren't compatible")
-        }
-         if (explicitBounds.first.size() != A.cols() || explicitBounds.second.size() != A.cols()) {
-            throw std::invalid_argument("Bounds must match the dimensionality of the polytope.");
-        } // ensures that the dimensionality of the bounds matches the columns of A
-    }
-
-   // verifies if a point belongs to P and returns true if it does, false otherwise
-     bool contains(const Eigen::VectorXd &point) const override {
-      Eigen::VectorXd pointVec = Eigen::Map<const Eigen::VectorXd>(point.data(), point.size());
-        /* A*point is a mvm whose result is confronted with the
-        corresponding element of b*/
-        return ((A*pointVec).array() <= b.array()).all(); // this is done for all the points
-        
-     }
-
-   // takes the bound as a parameter 
-    std::vector<std::pair<double, double>> getBounds() const override {
-        std::vector<std::pair<double, double>> box(bounds.first.size());
-        for (size_t i = 0; i < bounds.first.size(); ++i) {
-            box[i] = {bounds.first[i], bounds.second[i]};
-        }
-        return box;
-    }
-
-
-    double getVolume(size_t numSamples, size_t strataPerDimension) const {
-    auto [lower, upper] = bounds; // Bounding box
-    size_t dimensions = lower.size();
-
-    // Calculate bounding box volume
-    double boundingBoxVolume = 1.0;
-    for (size_t i = 0; i < dimensions; ++i) {
-        boundingBoxVolume *= (upper[i] - lower[i]);
-    }
-
-    // Monte Carlo sampling with stratification
-    size_t numThreads = std::thread::hardware_concurrency();
-    size_t pointsPerThread = numSamples / numThreads;
-
-    // Lambda for thread workers
-    auto worker = [&](size_t threadIndex) {
-        std::mt19937 rng(std::random_device{}());
-        double localCount = 0;
-
-        for (size_t i = 0; i < pointsPerThread; ++i) {
-            auto point = generateStratifiedPoint(rng, strataPerDimension); // Use existing function
-            if (contains(point)) {
-                localCount++;
-            }
-        }
-
-        return localCount;
-    };
-
-    // Parallel execution
-    std::vector<std::future<double>> futures;
-    for (size_t i = 0; i < numThreads; ++i) {
-        futures.emplace_back(std::async(std::launch::async, worker, i));
-    }
-
-    // Aggregate results
-    double pointsInside = 0.0;
-    for (auto &future : futures) {
-        pointsInside += future.get();
-    }
-
-    // Estimate volume
-    return boundingBoxVolume * (pointsInside / numSamples);
-}
-
-}
-
-
 class MonteCarloIntegrator {
     std::vector<std::uniform_real_distribution<double>> distributions;                  //distributions: a vector of uniform distributions. Each distribution generates random numbers in a specific range, one for each domain size
     std::vector<std::mt19937> engines; // TODO: use different types of engines?         //vector of random number generators
@@ -193,36 +107,22 @@ class MonteCarloIntegrator {
 
     // Initializes pseudo-random engines with seeds from std::seed_seq
     // std::seed_seq is initialized with non-deterministic random values from std::random_device
+    void initializeEngines(size_t numThreads) {
+        std::random_device rd;                                                          //provides random values
+        std::vector<std::uint32_t> entropy;                                             //entropy: accommodates these values ​​to create a seed sequence (std::seed_seq), 
+        entropy.reserve(numThreads);                                                    //which ensures that each generator (std::mt19937) has a different seed.
 
-    //--> Method to initialize engines with different types and seeds
-    void initializeEngines(size_t numThreads, std::string engineType) {
-        if (engineType == "mt19937") {
-            // Use Mersenne Twister
-            std::random_device rd;
-            std::vector<std::uint32_t> entropy(numThreads);
-            for (size_t i = 0; i < numThreads; ++i) {
-                entropy[i] = rd();
-            }
-            std::seed_seq seq(entropy.begin(), entropy.end());
-            std::vector<std::uint32_t> seeds(numThreads);
-            seq.generate(seeds.begin(), seeds.end());
+        for (size_t i = 0; i < numThreads; ++i) {
+            entropy.push_back(rd());
+        }
 
-            engines.clear();
-            for (auto seed : seeds) {
-                engines.emplace_back(std::mt19937(seed));
-            }
-        } else if (engineType == "xorshift") {
-            // Use Xorshift128+
-            std::random_device rd;
-            std::array<std::uint32_t, 4> seedData = {rd(), rd(), rd(), rd()};
-            std::seed_seq seedSeq(seedData.begin(), seedData.end());
+        std::seed_seq seq(entropy.begin(), entropy.end());
+        std::vector<std::uint32_t> seeds(numThreads);
+        seq.generate(seeds.begin(), seeds.end());
 
-            engines.clear();
-            for (size_t i = 0; i < numThreads; ++i) {
-                engines.emplace_back(std::mt19937_64(seedSeq));
-            }
-        } else {
-            throw std::invalid_argument("Invalid engine type");
+        engines.clear();
+        for (auto seed: seeds) {
+            engines.emplace_back(seed);
         }
     }
 
@@ -356,176 +256,113 @@ class MonteCarloIntegrator {
 
     }
 
+     // New method: Metropolis-Hastings sampling
+        std::vector<double> generateHastingsPoint(std::mt19937 &eng, const std::function<double(const std::vector<double> &)> &f) {
+        std::vector<double> point = generatePoint(eng);
+        std::normal_distribution<double> proposalDist(0.0, 1.0);
+        std::vector<double> proposedPoint = point;
 
-};
-
-// TODO: `Use different type of sampling: stratified sampling, importance sampling (Metropolis-Hastings).`
-//-> stratified sampling
-
-
-//-> Metropolis-Hastings
-
-/*
-Metropolis-Hastings is useful to get a sample generated from a "complex" probability distribution.
-How does it work: 
--choose a starting point x0 (we can choose whatever we want, like the origin)
--define a proposal distribution Q(x'|x), it will generates x' starting from x
--x' is the new candidate point
--compute r (acceptance rateo)
--decide to accept the point or not
--repeat
-
-//To parallelize it: divide the sample in multiple chains and compute the avg
-
-*/
-
-
-// Metropolis-Hastings Integrator class with parallel chains
-class MetropolisHastingsIntegrator {
-    const IntegrationDomain &domain; 
-    std::normal_distribution<double> proposalDist; // Gaussian proposal distribution
-
-    // Initializes random engines with unique seeds for each chain
-    std::vector<std::mt19937> initializeEngines(size_t numChains) {
-        std::random_device rd; 
-        std::vector<std::mt19937> engines(numChains); 
-        for (size_t i = 0; i < numChains; ++i) {
-            engines[i] = std::mt19937(rd()); // Initialize each engine with a unique seed.
+        for (size_t i = 0; i < point.size(); ++i) {
+            proposedPoint[i] += proposalDist(eng);
         }
-        return engines;
-    }
 
-public:
-    // Constructor to initialize the integrator with a domain
-    explicit MetropolisHastingsIntegrator(const IntegrationDomain &d)
-        : domain(d), proposalDist(0.0, 1.0) {} // Gaussian proposal distribution (mean = 0, stddev = 1).
+        double currentValue = f(point);  // Function value for the current point
+        double proposedValue = f(proposedPoint);  // Function value for the proposed point
 
-    // Perform a single Metropolis-Hastings chain
-    double integrateSingleChain(
-        const std::function<double(const std::vector<double> &)> &f, 
-        size_t numPoints,                                            
-        const std::vector<double> &initialPoint,                     
-        std::mt19937 &engine,                                        
-        size_t &accepted                                             // Counter for accepted points.
-    ) {
-        size_t dimensions = initialPoint.size(); // Number of dimensions of the domain.
-        std::vector<double> currentPoint = initialPoint; // Current point (initially the starting point).
-        double currentFValue = f(currentPoint); // Value of the function at the current point.
+        if (domain.contains(proposedPoint) && std::exp(proposedValue - currentValue) > std::uniform_real_distribution<double>(0.0, 1.0)(eng)) {
+            point = proposedPoint;  // Accept the new point if it's better or accepted based on the criterion
+        }
 
-        double sumF = 0.0; .
-        accepted = 0;
-
-        for (size_t i = 0; i < numPoints; ++i) {
-            // Generate a candidate point by adding Gaussian noise to the current point.
-            std::vector<double> candidatePoint(dimensions);
-            for (size_t d = 0; d < dimensions; ++d) {
-                candidatePoint[d] = currentPoint[d] + proposalDist(engine);
+        return point;
             }
 
-            // Check if the candidate point is within the domain.
-            if (domain.contains(candidatePoint)) {
-                double candidateFValue = f(candidatePoint);
 
-                // Compute the Metropolis-Hastings acceptance ratio.
-                double acceptanceRatio = candidateFValue / currentFValue;
+    // New method for integration using Hastings sampling
+    double integrateHastings(
+    const std::function<double(const std::vector<double> &)> &f,
+    size_t numPoints, size_t numThreads
+  ) {
+    initializeEngines(numThreads);
+    size_t pointsPerThread = numPoints / numThreads;
 
-                // Accept or reject the candidate point based on a uniform random threshold.
-                if (std::uniform_real_distribution<>(0.0, 1.0)(engine) <= acceptanceRatio) {
-                    currentPoint = candidatePoint; 
-                    currentFValue = candidateFValue; 
-                    ++accepted;
-                }
+    auto worker = [this, &f, pointsPerThread](size_t myIndex) {
+        double sum = 0.0;
+
+        for (size_t i = 0; i < pointsPerThread; ++i) {
+            // Pass the function f to generateHastingsPoint
+            auto point = generateHastingsPoint(engines[myIndex], f);
+            if (domain.contains(point)) {
+                sum += f(point);
             }
-
-            // Add the current function value to the cumulative sum.
-            sumF += currentFValue;
         }
-
-        // Return the partial integral result scaled by the domain's volume.
-        return domain.getVolume() * sumF / static_cast<double>(numPoints);
-    }
-
-    // Perform parallel integration with multiple chains
-    double integrateParallel(
-        const std::function<double(const std::vector<double> &)> &f, 
-        size_t numPoints,                                           
-        const std::vector<double> &initialPoint,                     
-        size_t numChains                                            
-    ) {
-        // Initialize random engines for each chain.
-        auto engines = initializeEngines(numChains);
-
-        // Calculate the number of points to be sampled per chain.
-        size_t pointsPerChain = numPoints / numChains;
-
-        // Launch parallel chains using std::async.
-        std::vector<std::future<std::pair<double, size_t>>> futures;
-        for (size_t i = 0; i < numChains; ++i) {
-            futures.push_back(std::async(
-                std::launch::async, // Execute asynchronously.
-                [this, &f, pointsPerChain, &initialPoint, &engine = engines[i]]() {
-                    size_t accepted = 0; // Counter for accepted points in this chain.
-                    double result = this->integrateSingleChain(f, pointsPerChain, initialPoint, engine, accepted);
-                    return std::make_pair(result, accepted); // Return the partial result and accepted points.
-                }
-            ));
-        }
-
-        // Collect results from all chains.
-        double totalResult = 0.0; // Sum of partial results from all chains.
-        size_t totalAccepted = 0; // Sum of accepted points from all chains.
-        for (auto &future : futures) {
-            auto [result, accepted] = future.get(); // Retrieve the result from each chain.
-            totalResult += result; 
-            totalAccepted += accepted;
-        }
-
-        // Print the overall acceptance rate.
-        std::cout << "Overall acceptance rate: "
-                  << static_cast<double>(totalAccepted) / numPoints * 100.0 << "%\n";
-
-        // Return the combined result (average of chain results).
-        return totalResult / numChains;
-    }
-};
-
-
-
-//TODO: update the main with the stratified and MH samplings
-
-int main() {
-    // Function to integrate: x^2 + y^2
-    auto f = [](const std::vector<double> &x) {
-        return x[0] * x[0] + x[1] * x[1];                                       //function
+        return sum;
     };
 
-    // A circle with radius 1 with center in (0, 0)
-    Hypersphere sphere(2, 1.0);                                                //Integration domain sphere(dimension, radius)
-    MonteCarloIntegrator integrator(sphere);
-
-    const std::vector<size_t> threadCounts = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024};
-    constexpr size_t numPoints = 10000000; // 10^7                            //total number of random points generated for Monte Carlo integration
-
-    std::cout << "Integration with " << numPoints << " points\n\n";
-    std::cout << std::setw(8) << "Threads"
-            << std::setw(15) << "Time (µs)"
-            << std::setw(15) << "Result" << "\n";
-    std::cout << std::string(38, '-') << "\n";
-
-    // Must show an increase of speed until a certain point (which is optimal #threads on your machine)
-    for (size_t threads: threadCounts) {
-        auto start = std::chrono::high_resolution_clock::now();                 //to record the time before and after the calculation
-        double result = integrator.integrate(f, numPoints, threads);
-        auto end = std::chrono::high_resolution_clock::now();                   //Calculate the total time spent integrating in microseconds
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-
-        // Must be close to pi/2
-        std::cout << std::setw(8) << threads
-                << std::setw(15) << duration.count()
-                << std::setw(15) << std::fixed << std::setprecision(6) << result << "\n";
+    std::vector<std::future<double>> futures;
+    futures.reserve(numThreads);
+    for (size_t i = 0; i < numThreads; ++i) {
+        futures.push_back(std::async(std::launch::async, worker, i));
     }
 
-    // TODO: find best #threads and iterate over increasing #points to show improvement in precision?
+    double totalSum = 0.0;
+    for (auto &future : futures) {
+        totalSum += future.get();
+    }
+
+    return domain.getVolume() * totalSum / static_cast<double>(numPoints);
+    }
+};
+
+
+int main() {
+   // Function to integrate: x^2 + y^2
+    auto f = [](const std::vector<double> &x) {
+        return x[0] * x[0] + x[1] * x[1]; 
+    };
+
+    // A circle with radius 1 centered at (0, 0)
+    Hypersphere sphere(2, 1.0);  // Integration on a sphere of dimension 2 and radius 1
+    MonteCarloIntegrator integrator(sphere);
+
+    const std::vector<size_t> threadCounts = {1, 2, 4, 8, 16, 32, 64};  // The various thread numbers for testing
+    constexpr size_t numPoints = 10000000;  // Number of random points generated for integration
+
+    std::cout << "Monte Carlo integration with " << numPoints << " points\n\n";
+    std::cout << std::setw(8) << "Threads"
+              << std::setw(15) << "Time (µs)"
+              << std::setw(15) << "Standard Result  "
+              << std::setw(15) << "Stratified Result  "
+              << std::setw(15) << " Hastings Result  " << "\n";  // Add column for Hastings
+    std::cout << std::string(68, '-') << "\n";  // Adjust separator to match the new columns
+
+    // Run the integration with different numbers of threads and compare the results
+    for (size_t threads : threadCounts) {
+        // Integration with the standard method
+        auto start = std::chrono::high_resolution_clock::now();
+        double resultStandard = integrator.integrate(f, numPoints, threads);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto durationStandard = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+        //Integration with Stratified Sampling
+        size_t strataPerDimension = 10;  // Number of layers per dimension
+        start = std::chrono::high_resolution_clock::now();
+        double resultStratified = integrator.integrateStratified(f, numPoints, threads, strataPerDimension);
+        end = std::chrono::high_resolution_clock::now();
+        auto durationStratified = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+        // Integration with Hastings
+        start = std::chrono::high_resolution_clock::now();
+        double resultHastings = integrator.integrateHastings(f, numPoints, threads);
+        end = std::chrono::high_resolution_clock::now();
+        auto durationHastings = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+        // Results
+        std::cout << std::setw(8) << threads
+                  << std::setw(15) << durationStandard.count()
+                  << std::setw(15) << std::fixed << std::setprecision(6) << resultStandard
+                  << std::setw(15) << std::fixed << std::setprecision(6) << resultStratified
+                  << std::setw(15) << std::fixed << std::setprecision(6) << resultHastings << "\n";
+    }
 
     return 0;
 }
