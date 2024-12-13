@@ -313,7 +313,6 @@ class MonteCarloIntegrator {
     }
 };
 
-
 int main() {
    // Function to integrate: x^2 + y^2
     auto f = [](const std::vector<double> &x) {
