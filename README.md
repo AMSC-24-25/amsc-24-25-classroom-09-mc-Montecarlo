@@ -7,17 +7,18 @@ sampling.
 ## Understanding Monte Carlo Integration
 
 Monte Carlo integration is a technique for approximating integrals by using random samples. Instead of analytically
-computing the integral, we estimate it by drawing points uniformly from the domain and evaluating the integrand at these
-points. As the number of samples increases, the approximation typically converges to the true value of the integral.
+computing the integral, we estimate it by drawing random points uniformly from the domain and evaluating the integrand
+at these points. As the number of samples increases, the approximation typically converges to the true value of the
+integral.
 
 The basic formula for Monte Carlo integration is:
 
-$$\int_{\Omega} f(x)\,dx \approx \frac{|\Omega|}{n} \sum_{i=0}^{n-1} f(x_i)$$
+$$\int_{\Omega} f(x)\ dx \simeq \frac{|\Omega|}{n} \sum_{i=0}^{n-1} f(x_i)$$
 
 - $\Omega$ is the domain over which we integrate.
 - $f(x)$ is the function to be integrated.
 - $|\Omega|$ denotes the measure (volume, area, length) of the domain.
-- $x_i$ are points sampled uniformly at random from \( \Omega \).
+- $x_i$ are points sampled uniformly at random from $\Omega$.
 - $n$ is the number of sample points.
 
 The accuracy of the Monte Carlo approximation improves with the number of samples, and various variance-reduction
@@ -29,7 +30,7 @@ techniques (such as stratified sampling) can be applied.
 
 In standard Monte Carlo integration, we:
 
-1. Determine a bounding region that encompasses the entire domain $\Omega$.
+1. Determine a bounding region that contains the entire domain $\Omega$.
 2. Draw points uniformly at random from this bounding region.
 3. Evaluate $f$ at each point. If a point falls outside $\Omega$, its contribution is zero.
 4. Average these values and multiply by the measure of the bounding region.
@@ -76,7 +77,7 @@ sampling, but it can be beneficial for challenging or high-dimensional integrals
     - The integration process is parallelized by splitting the total number of samples (`n`) across multiple threads.
     - Each thread independently generates and evaluates its own subset of points and accumulates partial sums.
     - After all threads finish, their partial sums are combined (reduced) to produce the final integral estimate. This
-      leverages multiple CPU cores to speed up the computation.
+      uses multiple CPU cores to speed up the computation.
 
 - **Multiple Integration Domains**:
     - **Hypersphere**: A hypersphere of arbitrary dimension and radius, bounded by a hypercube.
@@ -123,6 +124,8 @@ The program shows:
   methods for various numbers of points.
 - Integrating `f(x,y) = 1` over an equilateral triangle (using `Polygon2D`) and print a similar comparison table.
 - Optionally, you can integrate over a `Polytope` defined in `polytope.h/cpp`.
+
+![example](img/example.png)
 
 ## Possible Improvements
 
