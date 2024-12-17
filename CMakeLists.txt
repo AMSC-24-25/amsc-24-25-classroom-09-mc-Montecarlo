@@ -1,5 +1,21 @@
 cmake_minimum_required(VERSION 3.17)
-project(09-mc)
+project(09-mc LANGUAGES CXX)
+
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Ofast -march=native")
-add_executable(09-mc main.cpp)
+
+# Download Eigen
+include(FetchContent)
+FetchContent_Declare(
+        eigen
+        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+        GIT_TAG 3.4.0
+)
+FetchContent_MakeAvailable(eigen)
+
+file(GLOB_RECURSE SRC_FILES "${CMAKE_SOURCE_DIR}/src/*.cpp")
+
+add_executable(09-mc ${SRC_FILES})
+
+target_include_directories(09-mc PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_compile_options(09-mc PRIVATE -Ofast -march=native)
+target_link_libraries(09-mc PRIVATE Eigen3::Eigen)
