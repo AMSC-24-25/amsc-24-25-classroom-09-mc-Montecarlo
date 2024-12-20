@@ -32,17 +32,17 @@ int main() {
     std::cout << "Using " << numThreads << " threads.\n";
 
     // Various numbers of points to test
-    const std::vector<size_t> numPointsValues = {10'000, 100'000, 1'000'000, 10'000'000, 100'000'000};
+    const std::vector<size_t> numPointsValues = {10'000, 100'000, 1'000'000, 10'000'000, 100'000'000, 1'000'000'000};
 
     // For the circle domain test
     std::cout << "Integrating f(x,y)=x^2+y^2 over the unit circle (radius=1):\n";
     std::cout << "Expected result (π/2): " << std::fixed << std::setprecision(6) << (M_PI / 2) << "\n\n";
     std::cout << std::setw(12) << "NumPoints"
-              << std::setw(16) << "Time (µs)"
-              << std::setw(18) << "Standard Result"
-              << std::setw(18) << "Stratified Result"
-              << std::setw(18) << "Hastings Result"
-              << std::setw(20) << "Hastings Accept(%)" << "\n";
+            << std::setw(16) << "Time (µs)"
+            << std::setw(18) << "Standard Result"
+            << std::setw(18) << "Stratified Result"
+            << std::setw(18) << "Hastings Result"
+            << std::setw(20) << "Hastings Accept(%)" << "\n";
     std::cout << std::string(101, '-') << "\n";
 
     for (size_t numPoints: numPointsValues) {
@@ -53,9 +53,9 @@ int main() {
         auto durationStandard = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         // Stratified Monte Carlo integration on the circle
-        int32_t strataPerDimension = 10;
+        int32_t strataPerDim = 10;
         start = std::chrono::high_resolution_clock::now();
-        double resultStratified = mcIntegratorCircle.integrateStratified(f_circle, numPoints, numThreads, strataPerDimension);
+        double resultStratified = mcIntegratorCircle.integrateStratified(f_circle, numPoints, numThreads, strataPerDim);
         end = std::chrono::high_resolution_clock::now();
         auto durationStratified = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
@@ -69,21 +69,21 @@ int main() {
         auto durationHastings = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         std::cout << std::setw(12) << numPoints
-                  << std::setw(15) << durationStandard.count()
-                  << std::setw(18) << std::fixed << std::setprecision(6) << resultStandard
-                  << std::setw(18) << std::fixed << std::setprecision(6) << resultStratified
-                  << std::setw(18) << std::fixed << std::setprecision(6) << resultHastings
-                  << std::setw(20) << std::fixed << std::setprecision(2) << (acceptanceRate * 100.0)
-                  << "\n";
+                << std::setw(15) << durationStandard.count()
+                << std::setw(18) << std::fixed << std::setprecision(6) << resultStandard
+                << std::setw(18) << std::fixed << std::setprecision(6) << resultStratified
+                << std::setw(18) << std::fixed << std::setprecision(6) << resultHastings
+                << std::setw(20) << std::fixed << std::setprecision(2) << (acceptanceRate * 100.0)
+                << "\n";
     }
 
     // Now integrate over the (1,1,1) triangle domain with f(x,y)=1
     // Define the vertices of an equilateral triangle of side length 1
     // A=(0,0), B=(1,0), C=(0.5, sqrt(3)/2)
-    std::vector<std::pair<double,double>> triangleVertices = {
+    std::vector<std::pair<double, double>> triangleVertices = {
         {0.0, 0.0},
         {1.0, 0.0},
-        {0.5, std::sqrt(3.0)/2.0}
+        {0.5, std::sqrt(3.0) / 2.0}
     };
 
     Polygon2D triangle(triangleVertices);
@@ -93,21 +93,21 @@ int main() {
     MetropolisHastingsIntegrator mhIntegratorTriangle(triangle);
 
     // The function to integrate is f(x,y)=1
-    auto f_identity = [](const std::vector<double> &){
+    auto f_identity = [](const std::vector<double> &) {
         return 1.0;
     };
 
     // The expected result is the area of the triangle = sqrt(3)/4
-    double expectedTriangleArea = std::sqrt(3.0)/4.0;
+    double expectedTriangleArea = std::sqrt(3.0) / 4.0;
 
     std::cout << "\nIntegrating f(x,y)=1 over the equilateral triangle (1,1,1):\n";
     std::cout << "Expected area: " << std::fixed << std::setprecision(6) << expectedTriangleArea << "\n\n";
     std::cout << std::setw(12) << "NumPoints"
-              << std::setw(16) << "Time (µs)"
-              << std::setw(18) << "Standard Result"
-              << std::setw(18) << "Stratified Result"
-              << std::setw(18) << "Hastings Result"
-              << std::setw(20) << "Hastings Accept(%)" << "\n";
+            << std::setw(16) << "Time (µs)"
+            << std::setw(18) << "Standard Result"
+            << std::setw(18) << "Stratified Result"
+            << std::setw(18) << "Hastings Result"
+            << std::setw(20) << "Hastings Accept(%)" << "\n";
     std::cout << std::string(101, '-') << "\n";
 
     for (size_t numPoints: numPointsValues) {
@@ -118,15 +118,17 @@ int main() {
         auto durationStandard = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         // Stratified Monte Carlo integration on the triangle
-        int32_t strataPerDimension = 10;
+        int32_t strataPerDim = 10;
         start = std::chrono::high_resolution_clock::now();
-        double resultStratified = mcIntegratorTriangle.integrateStratified(f_identity, numPoints, numThreads, strataPerDimension);
+        double resultStratified = mcIntegratorTriangle.integrateStratified(
+            f_identity, numPoints, numThreads, strataPerDim
+        );
         end = std::chrono::high_resolution_clock::now();
         auto durationStratified = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         // Metropolis-Hastings integration on the triangle
         size_t numPointsMH = numPoints / 10;
-        std::vector<double> initialPoint = {0.5, std::sqrt(3.0)/6.0};
+        std::vector<double> initialPoint = {0.5, std::sqrt(3.0) / 6.0};
         start = std::chrono::high_resolution_clock::now();
         auto [resultHastings, acceptanceRate] =
                 mhIntegratorTriangle.integrateParallel(f_identity, numPointsMH, initialPoint, numThreads);
@@ -134,12 +136,12 @@ int main() {
         auto durationHastings = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         std::cout << std::setw(12) << numPoints
-                  << std::setw(15) << durationStandard.count()
-                  << std::setw(18) << std::fixed << std::setprecision(6) << resultStandard
-                  << std::setw(18) << std::fixed << std::setprecision(6) << resultStratified
-                  << std::setw(18) << std::fixed << std::setprecision(6) << resultHastings
-                  << std::setw(20) << std::fixed << std::setprecision(2) << (acceptanceRate * 100.0)
-                  << "\n";
+                << std::setw(15) << durationStandard.count()
+                << std::setw(18) << std::fixed << std::setprecision(6) << resultStandard
+                << std::setw(18) << std::fixed << std::setprecision(6) << resultStratified
+                << std::setw(18) << std::fixed << std::setprecision(6) << resultHastings
+                << std::setw(20) << std::fixed << std::setprecision(2) << (acceptanceRate * 100.0)
+                << "\n";
     }
 
     return 0;

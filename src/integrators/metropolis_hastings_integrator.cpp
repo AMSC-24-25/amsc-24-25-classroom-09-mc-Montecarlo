@@ -1,7 +1,7 @@
 #include "metropolis_hastings_integrator.h"
 
 MetropolisHastingsIntegrator::MetropolisHastingsIntegrator(const IntegrationDomain &d)
-    : domain(d), proposalDist(0.0, 1.0) {} // Gaussian proposal (mean=0, stddev=1)
+    : domain(d), proposalDist(0.0, 0.01) {}
 
 // Initializes random engines with unique seeds for each chain
 std::vector<std::mt19937> MetropolisHastingsIntegrator::initializeEngines(size_t numChains) {
@@ -17,48 +17,51 @@ std::vector<std::mt19937> MetropolisHastingsIntegrator::initializeEngines(size_t
 }
 
 // Perform a single Metropolis-Hastings chain
-double MetropolisHastingsIntegrator::integrateSingleChain(
+std::pair<double, int32_t> MetropolisHastingsIntegrator::integrateSingleChain(
     const std::function<double(const std::vector<double> &)> &f,
     size_t numPoints,
     const std::vector<double> &initialPoint,
-    std::mt19937 &engine,
-    size_t &accepted
+    std::mt19937 &engine
 ) {
-    // Number of dimensions
-    size_t dimensions = initialPoint.size();
+    const size_t dimensions = initialPoint.size();
     std::vector<double> currentPoint = initialPoint;
     double currentFValue = f(currentPoint);
     double sumF = 0.0;
-    accepted = 0;
+    int32_t accepted = 0;
 
+    std::vector<double> candidatePoint(dimensions);
+    std::uniform_real_distribution<> unifDist(0.0, 1.0);
+
+    // Main sampling loop
     for (size_t i = 0; i < numPoints; ++i) {
-        // Generate a candidate point by adding Gaussian noise
-        std::vector<double> candidatePoint(dimensions);
+        // Generate candidate point by adding Gaussian noise
         for (size_t d = 0; d < dimensions; ++d) {
             candidatePoint[d] = currentPoint[d] + proposalDist(engine);
         }
 
-        // Check if the candidate point is within the domain.
-        if (domain.contains(candidatePoint)) {
+        // Check if the candidate point is within the bounded region
+        if (domain.boundContains(candidatePoint)) {
             double candidateFValue = f(candidatePoint);
 
             // Compute the Metropolis-Hastings acceptance ratio.
-            double acceptanceRatio = candidateFValue / currentFValue;
+            // Use max to avoid numerical issues with very small values
+            double acceptanceRatio = std::max(1e-10, candidateFValue / std::max(1e-10, currentFValue));
 
-            // Accept or reject the candidate point.
-            if (std::uniform_real_distribution<>(0.0, 1.0)(engine) <= acceptanceRatio) {
+            if (unifDist(engine) <= acceptanceRatio) {
                 currentPoint = candidatePoint;
                 currentFValue = candidateFValue;
                 ++accepted;
+
+                // Only add to sum if point is in actual domain
+                if (domain.contains(currentPoint)) {
+                    sumF += currentFValue;
+                }
             }
         }
-
-        // Add the current function value to the cumulative sum.
-        sumF += currentFValue;
     }
 
-    // Return the partial integral result scaled by the domain's volume.
-    return domain.getBoundedVolume() * sumF / static_cast<double>(numPoints);
+    // Return the partial integral result scaled by the domain's volume
+    return {sumF * domain.getBoundedVolume() / accepted, accepted};
 }
 
 // Perform parallel integration with multiple chains
@@ -70,27 +73,23 @@ std::pair<double, double> MetropolisHastingsIntegrator::integrateParallel(
 ) {
     // Initialize random engines for each chain
     auto engines = initializeEngines(numChains);
-
-    // Points per chain
     size_t pointsPerChain = numPoints / numChains;
 
     // Launch parallel chains using std::async
-    std::vector<std::future<std::pair<double, size_t>>> futures;
+    std::vector<std::future<std::pair<double, int32_t>>> futures;
     futures.reserve(numChains);
     for (size_t i = 0; i < numChains; ++i) {
         futures.push_back(std::async(
             std::launch::async,
             [this, &f, pointsPerChain, &initialPoint, &engine = engines[i]]() {
-                size_t accepted = 0;
-                double result = this->integrateSingleChain(f, pointsPerChain, initialPoint, engine, accepted);
-                return std::make_pair(result, accepted);
+                return this->integrateSingleChain(f, pointsPerChain, initialPoint, engine);
             }
         ));
     }
 
     // Collect results
     double totalResult = 0.0;
-    size_t totalAccepted = 0;
+    int32_t totalAccepted = 0;
     for (auto &future: futures) {
         auto [result, accepted] = future.get();
         totalResult += result;

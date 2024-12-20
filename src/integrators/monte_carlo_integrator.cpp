@@ -81,7 +81,7 @@ double MonteCarloIntegrator::integrate(
         totalSum += future.get();
     }
 
-    return domain.getBoundedVolume() * totalSum / static_cast<double>(numPoints);
+    return totalSum * domain.getBoundedVolume() / static_cast<double>(numPoints);
 }
 
 double MonteCarloIntegrator::integrateStratified(
@@ -164,5 +164,5 @@ double MonteCarloIntegrator::integrateStratified(
         totalSum += future.get();
     }
 
-    return domain.getBoundedVolume() * totalSum / static_cast<double>(numPoints);
+    return totalSum * domain.getBoundedVolume() / static_cast<double>(numPoints);
 }

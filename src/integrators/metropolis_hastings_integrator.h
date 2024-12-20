@@ -34,12 +34,12 @@ public:
     explicit MetropolisHastingsIntegrator(const IntegrationDomain &d);
 
     // Perform a single Metropolis-Hastings chain
-    double integrateSingleChain(
+    // Returns a pair of {result, #accepted points}
+    std::pair<double, int32_t> integrateSingleChain(
         const std::function<double(const std::vector<double> &)> &f,
         size_t numPoints,
         const std::vector<double> &initialPoint,
-        std::mt19937 &engine,
-        size_t &accepted
+        std::mt19937 &engine
     );
 
     // Perform parallel integration with multiple chains
