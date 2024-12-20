@@ -48,15 +48,14 @@ Stratified sampling reduces variance by partitioning the bounding region into sm
 2. Reduces the likelihood of clustering samples in just a few areas.
 3. Improves the accuracy of the integral estimate with fewer samples compared to plain uniform sampling.
 
-In practice, you divide each dimension into several intervals to form a grid of strata. For each stratum, you take at
-least one random sample. The result is then a weighted average of all strata. Since each subregion is sampled, the
-overall
-estimate tends to have lower variance, making stratified sampling more efficient and often more accurate for the same
-number of samples.
+In practice, you divide each dimension into several intervals to form a grid of strata. For each stratum, you then take
+multiple random points. The result is then a weighted average of all strata. Since each subregion is sampled, the
+overall estimate tends to have lower variance, making stratified sampling more efficient and often more accurate for
+the same number of samples.
 
 ### Metropolis-Hastings (MCMC)
 
-Metropolis-Hastings algorithm for sampling from a complex probability distribution p(x)
+Metropolis-Hastings algorithm for sampling from a complex probability distribution $p(x)$
 and computing expectations $E[h(x)]$ with respect to this distribution.
 
 How does it work:
@@ -69,10 +68,10 @@ How does it work:
 - for accepted points, accumulate $h(x)$ to compute $E[h(x)]$
 - repeat
 
-The algorithm will generate samples distributed according to p(x),
+The algorithm will generate samples distributed according to $p(x)$,
 which lets us compute $E[h(x)]$ = $\int h(x)p(x)dx / \int p(x)dx$.
 
-To parallelize: run multiple independent chains and average their results
+To parallelize: run multiple independent chains and average their results.
 
 ## Features
 
@@ -81,6 +80,30 @@ To parallelize: run multiple independent chains and average their results
     - Each thread independently generates and evaluates its own subset of points and accumulates partial sums.
     - After all threads finish, their partial sums are combined (reduced) to produce the final integral estimate. This
       uses multiple CPU cores to speed up the computation.
+    - Each thread has its own local generator, which are seeded with `std::seed_srq`, which itself is created with
+      random values from `std::random_device`:
+
+```c++
+    // Initializes pseudo-random engines with seeds from std::seed_seq
+    void initializeEngines(size_t numThreads) {
+        std::random_device rd;
+        std::vector<std::uint32_t> entropy;
+        entropy.reserve(numThreads);
+
+        for (size_t i = 0; i < numThreads; ++i) {
+            entropy.push_back(rd());
+        }
+
+        std::seed_seq seq(entropy.begin(), entropy.end());
+        std::vector<std::uint32_t> seeds(numThreads);
+        seq.generate(seeds.begin(), seeds.end());
+
+        engines.clear();
+        for (auto seed: seeds) {
+            engines.emplace_back(seed);
+        }
+    }
+```
 
 - **Multiple Integration Domains**:
     - **Hypersphere**: A hypersphere of arbitrary dimension and radius, bounded by a hypercube.
@@ -91,13 +114,14 @@ To parallelize: run multiple independent chains and average their results
 
 - **`domain/`**: Contains classes representing geometric domains (`Hypersphere`, `Polygon2D`, `Polytope`) and the
   `IntegrationDomain` interface they all implement.
-- **`integrators/`**: Contains integration strategies: `MonteCarloIntegrator` for standard and stratified sampling, and
+- **`integrators/`**: Contains an abstract `AbstractIntegrator` which handles parallel random number generation and also
+   the integration strategies: `MonteCarloIntegrator` for standard and stratified sampling, and
   `MetropolisHastingsIntegrator` for MH-sampling.
 - **`main.cpp`**: Demonstrates integrating different functions over different domains.
 
 ## Dependencies
 
-- **C++17 or later**:
+- **C++17** or later:
 - **CMake**: For building the project.
 - **Eigen**: A C++ template library for linear algebra.
 
@@ -122,11 +146,11 @@ To parallelize: run multiple independent chains and average their results
 
 The program shows:
 
-- Integrating `f(x,y) = x² + y²` over a unit circle, displaying results from standard, stratified, and
-  Metropolis-Hastings
-  methods for various numbers of points.
-- Integrating `f(x,y) = 1` over an equilateral triangle (using `Polygon2D`) and print a similar comparison table.
-- Optionally, you can integrate over a `Polytope` defined in `polytope.h/cpp`.
+- Integrating `f(x,y) = x² + y²` over a unit circle, displaying results from standard and stratified sampling 
+  for various numbers of points.
+- Integrating `f(x,y) = 1` over an equilateral triangle (using `Polygon2D`) to find its area 
+  and print a similar comparison table.
+- Calculates $E[x^2]$ of a standard 2D normal distribution using Metropolis-Hastings method of random chains.
 
 ![example](img/example.png)
 
