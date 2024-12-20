@@ -76,11 +76,11 @@ To parallelize: run multiple independent chains and average their results.
 ## Features
 
 - **Parallel Implementation**:
-    - The integration process is parallelized by splitting the total number of samples (`n`) across multiple threads.
+    - The integration process is parallelized by splitting the total number of samples across multiple threads.
     - Each thread independently generates and evaluates its own subset of points and accumulates partial sums.
     - After all threads finish, their partial sums are combined (reduced) to produce the final integral estimate. This
-      uses multiple CPU cores to speed up the computation.
-    - Each thread has its own local generator, which are seeded with `std::seed_srq`, which itself is created with
+      uses multiple threads to speed up the computation.
+    - Each thread has its own local generator, which are seeded with `std::seed_seq`, which itself is created with
       random values from `std::random_device`:
 
 ```c++
@@ -108,7 +108,7 @@ To parallelize: run multiple independent chains and average their results.
 - **Multiple Integration Domains**:
     - **Hypersphere**: A hypersphere of arbitrary dimension and radius, bounded by a hypercube.
     - **Polygon2D**: A polygon in 2D, defined by a set of vertices.
-    - **Polytope** (H-form): A convex polytope defined by linear inequalities (Ax ≤ b) and an explicit bounding box.
+    - **Polytope** (H-form): A convex polytope defined by linear inequalities ($Ax ≤ b$) and an explicit bounding box.
 
 ## Directory Structure
 
