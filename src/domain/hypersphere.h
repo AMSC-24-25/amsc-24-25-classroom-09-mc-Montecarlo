@@ -2,6 +2,7 @@
 #define HYPERSPHERE_H
 
 #include "integration_domain.h"
+
 #include <cmath>
 #include <vector>
 #include <utility>

@@ -2,6 +2,7 @@
 #define POLYGON2D_H
 
 #include "integration_domain.h"
+
 #include <vector>
 #include <utility>
 

@@ -1,4 +1,5 @@
 #include "hypersphere.h"
+
 #include <algorithm>
 
 Hypersphere::Hypersphere(size_t dims, double r) : dimensions{dims}, radius{r} {

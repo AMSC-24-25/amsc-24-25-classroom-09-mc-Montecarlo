@@ -1,4 +1,5 @@
 #include "polygon2d.h"
+
 #include <cmath>
 #include <stdexcept>
 

@@ -1,35 +1,15 @@
 #include "monte_carlo_integrator.h"
+
 #include <future>
 #include <numeric>
 #include <chrono>
 #include <thread>
 
-MonteCarloIntegrator::MonteCarloIntegrator(const IntegrationDomain &d) : domain(d) {
+MonteCarloIntegrator::MonteCarloIntegrator(const IntegrationDomain &d) : AbstractIntegrator(d) {
     // Create a random-value uniform distribution in [min, max] for each dimension using the domain bounds.
     auto bounds = domain.getBounds();
-    for (const auto &[min, max] : bounds) {
+    for (const auto &[min, max]: bounds) {
         distributions.emplace_back(min, max);
-    }
-}
-
-// Initializes pseudo-random engines with seeds from std::seed_seq
-// std::seed_seq is initialized with non-deterministic random values from std::random_device
-void MonteCarloIntegrator::initializeEngines(size_t numThreads) {
-    std::random_device rd;
-    std::vector<std::uint32_t> entropy;
-    entropy.reserve(numThreads);
-
-    for (size_t i = 0; i < numThreads; ++i) {
-        entropy.push_back(rd());
-    }
-
-    std::seed_seq seq(entropy.begin(), entropy.end());
-    std::vector<std::uint32_t> seeds(numThreads);
-    seq.generate(seeds.begin(), seeds.end());
-
-    engines.clear();
-    for (auto seed : seeds) {
-        engines.emplace_back(seed);
     }
 }
 

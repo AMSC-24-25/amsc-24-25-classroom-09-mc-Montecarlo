@@ -1,4 +1,5 @@
 #include "polytope.h"
+
 #include <thread>
 #include <future>
 #include <random>

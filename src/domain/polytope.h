@@ -2,10 +2,12 @@
 #define POLYTOPE_H
 
 #include "integration_domain.h"
-#include <Eigen/Dense>
+
 #include <stdexcept>
 #include <utility>
 #include <vector>
+
+#include <Eigen/Dense>
 
 class Polytope : public IntegrationDomain {
     Eigen::MatrixXd A;
