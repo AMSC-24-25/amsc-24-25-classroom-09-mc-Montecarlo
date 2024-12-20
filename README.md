@@ -56,20 +56,23 @@ number of samples.
 
 ### Metropolis-Hastings (MCMC)
 
-Metropolis-Hastings is a Markov chain Monte Carlo (MCMC) technique typically used to sample from complex probability
-distributions. Instead of sampling independently and uniformly, Metropolis-Hastings builds a chain of samples where each
-new sample is proposed based on the current state, and accepted or rejected according to an acceptance ratio derived
-from
-the target distribution.
+Metropolis-Hastings algorithm for sampling from a complex probability distribution p(x)
+and computing expectations $E[h(x)]$ with respect to this distribution.
 
-For integration purposes, if the target distribution is related to the integrand $f(x)$ (for instance, a probability
-distribution proportional to $f(x)$ if $f$ is non-negative), then Metropolis-Hastings can focus sampling on the
-regions that matter most. This can lead to more efficient exploration of complex domains or integrands, especially where
-uniform sampling would waste many samples in low-interest areas.
+How does it work:
 
-However, using Metropolis-Hastings for uniform integration requires adjustments to ensure that the distribution of
-samples matches the uniform density over the domain. This might be less straightforward than standard or stratified
-sampling, but it can be beneficial for challenging or high-dimensional integrals.
+- choose a starting point $x_0$
+- define a proposal distribution $Q(x'|x)$ (here: Gaussian is centered at current point)
+- generate new candidate point $x'$ from $Q(x'|x)$
+- compute acceptance ratio $r = p(x')/p(x)$
+- accept $x'$ with probability $min(1,r)$
+- for accepted points, accumulate $h(x)$ to compute $E[h(x)]$
+- repeat
+
+The algorithm will generate samples distributed according to p(x),
+which lets us compute $E[h(x)]$ = $\int h(x)p(x)dx / \int p(x)dx$.
+
+To parallelize: run multiple independent chains and average their results
 
 ## Features
 
