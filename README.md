@@ -131,6 +131,7 @@ To parallelize: run multiple independent chains and average their results.
 2. Clone the repository:
    ```bash
    git clone git@github.com:AMSC-24-25/09-mc-09-mc.git
+   mv 09-mc-09-mc 09-mc
    cd 09-mc
    ```
 3. Create a build directory and run CMake:

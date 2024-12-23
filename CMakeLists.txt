@@ -16,6 +16,10 @@ file(GLOB_RECURSE SRC_FILES "${CMAKE_SOURCE_DIR}/src/*.cpp" "${CMAKE_SOURCE_DIR}
 
 add_executable(09-mc ${SRC_FILES})
 
+# Link package pthread
+find_package(Threads REQUIRED)
+target_link_libraries(09-mc PRIVATE Threads::Threads)
+
 target_include_directories(09-mc PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_compile_options(09-mc PRIVATE -Ofast -march=native)
 target_link_libraries(09-mc PRIVATE Eigen3::Eigen)
