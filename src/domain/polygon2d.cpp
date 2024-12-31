@@ -15,16 +15,34 @@ bool Polygon2D::contains(const std::vector<double> &point) const {
     bool inside = false;
     size_t n = vertices.size();
 
-    // Count how many times the horizontal ray (to the right of the point) intersects the sides of the polygon.
-    // If the number of intersections is odd, the point is inside the polygon.
     for (size_t i = 0, j = n - 1; i < n; j = i++) {
         double xi = vertices[i].first, yi = vertices[i].second; // Current vertex (xi, yi)
         double xj = vertices[j].first, yj = vertices[j].second; // Previous vertex (xj, yj)
 
-        bool intersectsVertically = (yi > y) != (yj > y);
-        double intersectionX = (xj - xi) * (y - yi) / (yj - yi) + xi;
-        if (intersectsVertically && x < intersectionX) {
-            inside = !inside;
+        // Check if the point is exactly on a vertex
+        if ((x == xi && y == yi) || (x == xj && y == yj)) {
+            return true; // Point is on a vertex
+        }
+
+        // Check if the point is exactly on the edge
+        if ((yi > y) != (yj > y)) {
+            double intersectionX = (xj - xi) * (y - yi) / (yj - yi) + xi;
+            if (x == intersectionX) {
+                return true; // Point is on the edge
+            }
+            if (x < intersectionX) {
+                inside = !inside;
+            }
+        }
+
+        // Check if the point is exactly on a horizontal edge
+        if ((y == yi && y == yj) && (x >= std::min(xi, xj) && x <= std::max(xi, xj))) {
+            return true; // Point is on the horizontal edge
+        }
+
+        // Check if the point is exactly on a vertical edge
+        if ((x == xi && x == xj) && (y >= std::min(yi, yj) && y <= std::max(yi, yj))) {
+            return true; // Point is on the vertical edge
         }
     }
 
